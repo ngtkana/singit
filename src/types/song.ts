@@ -1,12 +1,10 @@
-import { Timestamp } from 'firebase/firestore';
-
 export type Platform = 'youtube' | 'niconico';
 export type SongStatus = 'candidate' | 'practicing' | 'recorded' | 'published';
 export type SongSource = 'extension' | 'manual' | 'cover';
 
 export interface Song {
   id: string;
-  userId: string;
+  userId?: string; // オプショナル（ローカルのみの場合は不要）
 
   // 基本情報
   title: string;
@@ -30,14 +28,14 @@ export interface Song {
   notes: string;
 
   // メタ情報
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: number; // UNIX timestamp (ミリ秒)
+  updatedAt: number; // UNIX timestamp (ミリ秒)
   source: SongSource;
 
   // 自動取得情報
   thumbnailUrl: string;
   duration: number; // 秒
-  publishedAt: Timestamp;
+  publishedAt: number; // UNIX timestamp (ミリ秒)
   viewCount: number;
   description: string;
 }
