@@ -1,6 +1,8 @@
 import { createElement, appendChildren, renderPage } from '@/lib/utils/dom';
 import { signOut, getCurrentUser, signInWithGoogle } from '@/lib/firebase/auth';
 import { router } from '@/router';
+import { getAllSongs } from '@/lib/storage/local';
+import { createSongCard } from '@/components/song-card';
 
 export function renderDashboard() {
   const user = getCurrentUser();
@@ -116,20 +118,36 @@ export function renderDashboard() {
 
   appendChildren(titleBar, [pageTitle, addButton]);
 
-  // 曲リストプレースホルダー
-  const emptyState = createElement('div', {
-    className: 'card text-center py-12',
-    innerHTML: `
-      <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
-      </svg>
-      <h3 class="text-lg font-medium text-gray-900 mb-2">まだ曲がありません</h3>
-      <p class="text-gray-600 mb-4">Chrome拡張で動画サイトから曲を追加するか、手動で曲を追加してください</p>
-      <button class="btn-primary">Chrome拡張をインストール</button>
-    `,
-  });
+  // 曲を取得
+  const songs = getAllSongs();
 
-  appendChildren(main, [titleBar, emptyState]);
+  // 曲一覧またはempty state
+  if (songs.length === 0) {
+    const emptyState = createElement('div', {
+      className: 'card text-center py-12',
+      innerHTML: `
+        <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+        </svg>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">まだ曲がありません</h3>
+        <p class="text-gray-600 mb-4">「曲を追加」ボタンから曲を追加してみましょう</p>
+      `,
+    });
+    main.appendChild(emptyState);
+  } else {
+    const songGrid = createElement('div', {
+      className: 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4',
+    });
+
+    songs.forEach((song) => {
+      const songCard = createSongCard(song);
+      songGrid.appendChild(songCard);
+    });
+
+    main.appendChild(songGrid);
+  }
+
+  appendChildren(main, [titleBar]);
   appendChildren(container, [header, main]);
   renderPage(container);
 }
