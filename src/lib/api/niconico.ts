@@ -3,7 +3,7 @@ export interface NiconicoVideoData {
   description: string;
   thumbnailUrl: string;
   duration: number; // 秒
-  publishedAt: number; // UNIX timestamp
+  publishedAt: number; // UNIX timestamp (ms)
   viewCount: number;
 }
 

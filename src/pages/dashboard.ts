@@ -108,8 +108,9 @@ export function renderDashboard() {
     await handleUrlInput(url, urlInput);
   });
 
-  urlInput.addEventListener('keypress', async (e) => {
+  urlInput.addEventListener('keydown', async (e) => {
     if (e.key === 'Enter') {
+      e.preventDefault();
       await handleUrlInput(urlInput.value, urlInput);
     }
   });
@@ -282,12 +283,19 @@ function createCenterPanel(): HTMLElement {
         const linkButton = createElement('button', {
           className: 'p-0.5 rounded text-red-600 hover:bg-red-50 w-5 h-5 flex items-center justify-center',
           innerHTML: SquarePlay,
+          attributes: {
+            type: 'button',
+            'aria-label': `再生: ${link.title}`,
+          },
         });
         linkButton.title = link.title;
 
         linkButton.addEventListener('click', (e) => {
           e.stopPropagation();
-          window.open(link.url, '_blank');
+          const newWindow = window.open(link.url, '_blank');
+          if (newWindow) {
+            newWindow.opener = null;
+          }
         });
 
         linkContainer.appendChild(linkButton);
@@ -343,6 +351,10 @@ function createRightPanel(): HTMLElement {
     const deleteButton = createElement('button', {
       className: 'p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded',
       innerHTML: Trash2,
+      attributes: {
+        type: 'button',
+        'aria-label': `削除: ${song.title}`,
+      },
     });
     deleteButton.title = '削除';
 
@@ -375,6 +387,9 @@ function createRightPanel(): HTMLElement {
       const urlLink = createElement('a', {
         className: 'text-xs text-blue-600 hover:underline break-all',
         textContent: link.url,
+        attributes: {
+          rel: 'noopener noreferrer',
+        },
       }) as HTMLAnchorElement;
       urlLink.href = link.url;
       urlLink.target = '_blank';

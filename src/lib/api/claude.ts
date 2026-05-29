@@ -6,6 +6,9 @@ export interface SongMetadata {
   lyricist: string[]; // 作詞者
 }
 
+// 注意: この関数は現在使用されていません（CORS制限のため）
+// TODO: Firebase Functions に移行してサーバー側で実行する必要があります
+// VITE_ 環境変数はビルド時にバンドルに埋め込まれるため、APIキーが漏洩します
 export async function inferSongMetadata(
   videoTitle: string,
   videoDescription?: string

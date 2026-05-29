@@ -64,7 +64,7 @@ function migrateLegacySong(legacy: LegacySong): Song {
 // localStorageから全曲を取得
 export function getAllSongs(): Song[] {
   // マイグレーション済みチェック
-  const migrated = localStorage.getItem(MIGRATION_KEY);
+  const isMigrated = localStorage.getItem(MIGRATION_KEY);
 
   const data = localStorage.getItem(STORAGE_KEY);
   if (!data) return [];
@@ -73,15 +73,15 @@ export function getAllSongs(): Song[] {
     const parsed = JSON.parse(data);
 
     // マイグレーション未実施の場合
-    if (!migrated && parsed.length > 0) {
+    if (!isMigrated && parsed.length > 0) {
       const firstItem = parsed[0];
       // 旧形式を検出（originalVideoUrlフィールドがある）
-      if ('originalVideoUrl' in firstItem) {
+      if (typeof firstItem === 'object' && firstItem !== null && 'originalVideoUrl' in firstItem) {
         console.log('旧データ形式を検出。マイグレーションを実行します...');
-        const migrated = parsed.map((song: LegacySong) => migrateLegacySong(song));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+        const migratedSongs = parsed.map((song: LegacySong) => migrateLegacySong(song));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(migratedSongs));
         localStorage.setItem(MIGRATION_KEY, 'true');
-        return migrated;
+        return migratedSongs;
       }
     }
 

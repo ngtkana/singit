@@ -3,7 +3,7 @@ export interface YouTubeVideoData {
   description: string;
   thumbnailUrl: string;
   duration: number; // 秒
-  publishedAt: number; // UNIX timestamp
+  publishedAt: number; // UNIX timestamp (ms)
   viewCount: number;
 }
 
@@ -19,7 +19,7 @@ export async function fetchYouTubeVideoData(
 
   try {
     const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=snippet,contentDetails,statistics&key=${apiKey}`
+      `https://www.googleapis.com/youtube/v3/videos?id=${encodeURIComponent(videoId)}&part=snippet,contentDetails,statistics&key=${encodeURIComponent(apiKey)}`
     );
 
     if (!response.ok) {
