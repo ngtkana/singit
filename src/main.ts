@@ -1,19 +1,48 @@
 import './styles/main.css';
+import { router } from './router';
+import { onAuthChange } from './lib/firebase/auth';
+import { renderLoginPage } from './pages/login';
+import { renderDashboard } from './pages/dashboard';
 
-// アプリエントリーポイント
-const app = document.querySelector<HTMLDivElement>('#app')!;
+// ルーティング設定
+router.addRoute('/', () => {
+  renderDashboard();
+});
 
-app.innerHTML = `
-  <div class="min-h-screen flex items-center justify-center">
-    <div class="text-center">
-      <h1 class="text-4xl font-bold mb-4">Singit</h1>
-      <p class="text-gray-600 mb-8">歌ってみた曲候補管理アプリ</p>
-      <div class="space-x-4">
-        <button class="btn-primary">ログイン</button>
-        <button class="btn-secondary">詳細を見る</button>
-      </div>
-    </div>
-  </div>
-`;
+router.addRoute('/login', () => {
+  renderLoginPage();
+});
+
+router.setNotFoundHandler(() => {
+  router.navigate('/');
+});
+
+// 認証状態の監視
+let isInitialized = false;
+
+onAuthChange((user) => {
+  if (!isInitialized) {
+    // 初回ロード時
+    isInitialized = true;
+    if (user) {
+      // ログイン済み
+      if (window.location.pathname === '/login') {
+        router.replace('/');
+      } else {
+        router.init();
+      }
+    } else {
+      // 未ログイン
+      router.replace('/login');
+    }
+  } else {
+    // 認証状態変更時
+    if (user) {
+      router.navigate('/');
+    } else {
+      router.navigate('/login');
+    }
+  }
+});
 
 console.log('Singit アプリケーション起動');
