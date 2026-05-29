@@ -1,14 +1,91 @@
-import type { Song } from '@/types/song';
+import type { Song, VideoLink } from '@/types/song';
 
 const STORAGE_KEY = 'singit_songs';
+const MIGRATION_KEY = 'singit_migration_v2';
+
+// 旧データ構造（マイグレーション用）
+interface LegacySong {
+  id: string;
+  userId?: string;
+  title: string;
+  originalVideoUrl: string;
+  platform: 'youtube' | 'niconico';
+  videoId: string;
+  composer: string[];
+  arranger: string[];
+  vocalist: string[];
+  lyricist: string[];
+  genre?: string[];
+  status: string;
+  difficulty?: number;
+  notes: string;
+  createdAt: number;
+  updatedAt: number;
+  source?: string;
+  thumbnailUrl?: string;
+  duration?: number;
+  publishedAt?: number;
+  viewCount?: number;
+  description?: string;
+}
+
+// 旧形式から新形式への変換
+function migrateLegacySong(legacy: LegacySong): Song {
+  const videoLink: VideoLink = {
+    id: crypto.randomUUID(),
+    platform: legacy.platform,
+    url: legacy.originalVideoUrl,
+    videoId: legacy.videoId,
+    title: legacy.title, // 動画タイトル（生データ）
+    thumbnailUrl: legacy.thumbnailUrl,
+    duration: legacy.duration,
+    publishedAt: legacy.publishedAt,
+    viewCount: legacy.viewCount,
+    description: legacy.description,
+    label: '本家',
+    createdAt: legacy.createdAt,
+  };
+
+  return {
+    id: legacy.id,
+    userId: legacy.userId,
+    title: legacy.title, // 曲名（とりあえず動画タイトルと同じ）
+    videoLinks: [videoLink],
+    composer: legacy.composer,
+    arranger: legacy.arranger,
+    vocalist: legacy.vocalist,
+    lyricist: legacy.lyricist,
+    notes: legacy.notes,
+    createdAt: legacy.createdAt,
+    updatedAt: legacy.updatedAt,
+  };
+}
 
 // localStorageから全曲を取得
 export function getAllSongs(): Song[] {
+  // マイグレーション済みチェック
+  const isMigrated = localStorage.getItem(MIGRATION_KEY);
+
   const data = localStorage.getItem(STORAGE_KEY);
   if (!data) return [];
 
   try {
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+
+    // マイグレーション未実施の場合
+    if (!isMigrated && parsed.length > 0) {
+      const firstItem = parsed[0];
+      // 旧形式を検出（originalVideoUrlフィールドがある）
+      if (typeof firstItem === 'object' && firstItem !== null && 'originalVideoUrl' in firstItem) {
+        console.log('旧データ形式を検出。マイグレーションを実行します...');
+        const migratedSongs = parsed.map((song: LegacySong) => migrateLegacySong(song));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(migratedSongs));
+        localStorage.setItem(MIGRATION_KEY, 'true');
+        return migratedSongs;
+      }
+    }
+
+    return parsed;
   } catch (error) {
     console.error('曲データの読み込みエラー:', error);
     return [];
@@ -56,18 +133,6 @@ export function deleteSong(id: string): boolean {
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
   return true;
-}
-
-// タグで検索
-export function getSongsByTag(tag: string): Song[] {
-  const songs = getAllSongs();
-  return songs.filter(song => song.tags.includes(tag));
-}
-
-// ステータスで検索
-export function getSongsByStatus(status: Song['status']): Song[] {
-  const songs = getAllSongs();
-  return songs.filter(song => song.status === status);
 }
 
 // 全曲を上書き（同期時に使用）

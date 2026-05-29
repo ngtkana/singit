@@ -1,10 +1,73 @@
 import { createElement, appendChildren, renderPage } from '@/lib/utils/dom';
 import { signOut, getCurrentUser, signInWithGoogle } from '@/lib/firebase/auth';
-import { router } from '@/router';
-import { getAllSongs } from '@/lib/storage/local';
-import type { Song } from '@/types/song';
+import { getAllSongs, deleteSong, addSong } from '@/lib/storage/local';
+import type { Song, VideoLink } from '@/types/song';
+import { ListMusic, SquarePlay, Trash2 } from 'lucide-static';
+import { fetchYouTubeVideoData } from '@/lib/api/youtube';
+import { parseVideoUrl } from '@/lib/utils/video-parser';
 
 let selectedSong: Song | null = null;
+
+async function handleUrlInput(url: string, inputElement: HTMLInputElement) {
+  const trimmedUrl = url.trim();
+  if (!trimmedUrl) return;
+
+  const { platform, videoId, normalizedUrl } = parseVideoUrl(trimmedUrl);
+
+  if (platform !== 'youtube' || !videoId) {
+    alert('有効なYouTube URLを入力してください');
+    return;
+  }
+
+  inputElement.value = '取得中...';
+  inputElement.disabled = true;
+
+  try {
+    const data = await fetchYouTubeVideoData(videoId);
+
+    if (!data) {
+      alert('動画情報の取得に失敗しました');
+      return;
+    }
+
+    const videoLink: VideoLink = {
+      id: crypto.randomUUID(),
+      platform: 'youtube',
+      url: normalizedUrl,
+      videoId,
+      title: data.title,
+      thumbnailUrl: data.thumbnailUrl,
+      duration: data.duration,
+      publishedAt: data.publishedAt,
+      viewCount: data.viewCount,
+      description: data.description,
+      createdAt: Date.now(),
+    };
+
+    // 曲を追加（推論は後で実装）
+    const now = Date.now();
+    const newSong: Omit<Song, 'id'> = {
+      title: data.title, // とりあえず動画タイトルをそのまま使用
+      videoLinks: [videoLink],
+      composer: [],
+      arranger: [],
+      vocalist: [],
+      lyricist: [],
+      notes: '',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    addSong(newSong);
+    renderDashboard();
+  } catch (error) {
+    console.error('曲追加エラー:', error);
+    alert('曲の追加に失敗しました');
+  } finally {
+    inputElement.value = '';
+    inputElement.disabled = false;
+  }
+}
 
 export function renderDashboard() {
   const user = getCurrentUser();
@@ -27,16 +90,32 @@ export function renderDashboard() {
     className: 'flex items-center gap-3',
   });
 
-  const addButton = createElement('button', {
-    className: 'px-3 py-1.5 bg-primary text-white rounded hover:opacity-90 text-sm',
-    textContent: '+ 新規',
+  // URL入力欄
+  const urlInput = createElement('input', {
+    className: 'px-3 py-1.5 border border-gray-300 rounded text-sm w-96',
+    attributes: {
+      type: 'text',
+      placeholder: 'YouTube URLを貼り付け...',
+    },
+  }) as HTMLInputElement;
+
+  urlInput.addEventListener('paste', async (e) => {
+    e.preventDefault();
+    const url = e.clipboardData?.getData('text');
+    if (!url) return;
+
+    urlInput.value = url;
+    await handleUrlInput(url, urlInput);
   });
 
-  addButton.addEventListener('click', () => {
-    router.navigate('/songs/new');
+  urlInput.addEventListener('keydown', async (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      await handleUrlInput(urlInput.value, urlInput);
+    }
   });
 
-  topBarRight.appendChild(addButton);
+  topBarRight.appendChild(urlInput);
 
   // ログイン状態に応じてボタンを追加
   if (user) {
@@ -114,55 +193,7 @@ function createSidebar(): HTMLElement {
 
   appendChildren(librarySection, [libraryTitle, allSongsButton]);
 
-  // ステータス
-  const statusSection = createElement('div');
-  const statusTitle = createElement('div', {
-    className: 'text-xs font-semibold text-gray-500 mb-2',
-    textContent: 'ステータス',
-  });
-
-  const statuses: Array<{ label: string; value: Song['status'] }> = [
-    { label: '候補', value: 'candidate' },
-    { label: '練習中', value: 'practicing' },
-    { label: '録音済', value: 'recorded' },
-    { label: '公開済', value: 'published' },
-  ];
-
-  const statusList = createElement('div', { className: 'space-y-1' });
-  statuses.forEach(({ label }) => {
-    const statusButton = createElement('button', {
-      className: 'w-full text-left px-2 py-1 text-sm hover:bg-gray-200 rounded',
-      textContent: label,
-    });
-    statusList.appendChild(statusButton);
-  });
-
-  appendChildren(statusSection, [statusTitle, statusList]);
-
-  // タグ
-  const tagsSection = createElement('div');
-  const tagsTitle = createElement('div', {
-    className: 'text-xs font-semibold text-gray-500 mb-2',
-    textContent: 'タグ',
-  });
-
-  // 全曲からユニークなタグを抽出
-  const songs = getAllSongs();
-  const allTags = new Set<string>();
-  songs.forEach((song) => song.tags.forEach((tag) => allTags.add(tag)));
-
-  const tagList = createElement('div', { className: 'space-y-1' });
-  Array.from(allTags).forEach((tag) => {
-    const tagButton = createElement('button', {
-      className: 'w-full text-left px-2 py-1 text-sm hover:bg-gray-200 rounded truncate',
-      textContent: tag,
-    });
-    tagList.appendChild(tagButton);
-  });
-
-  appendChildren(tagsSection, [tagsTitle, tagList]);
-
-  appendChildren(sidebarContent, [librarySection, statusSection, tagsSection]);
+  appendChildren(sidebarContent, [librarySection]);
   sidebar.appendChild(sidebarContent);
 
   return sidebar;
@@ -178,15 +209,23 @@ function createCenterPanel(): HTMLElement {
   if (songs.length === 0) {
     const emptyState = createElement('div', {
       className: 'flex-1 flex items-center justify-center text-gray-500',
-      innerHTML: `
-        <div class="text-center">
-          <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
-          </svg>
-          <p>曲がありません</p>
-        </div>
-      `,
     });
+
+    const emptyContent = createElement('div', {
+      className: 'text-center',
+    });
+
+    const iconWrapper = createElement('div', {
+      className: 'mx-auto h-12 w-12 text-gray-400 mb-4',
+      innerHTML: ListMusic,
+    });
+
+    const message = createElement('p', {
+      textContent: '曲がありません',
+    });
+
+    appendChildren(emptyContent, [iconWrapper, message]);
+    emptyState.appendChild(emptyContent);
     centerPanel.appendChild(emptyState);
   } else {
     // テーブル
@@ -203,7 +242,7 @@ function createCenterPanel(): HTMLElement {
       className: 'bg-gray-100 sticky top-0',
     });
     const headerRow = createElement('tr');
-    ['曲名', 'タグ', 'ステータス', '追加日'].forEach((header) => {
+    ['曲名', 'YouTube', '追加日'].forEach((header) => {
       const th = createElement('th', {
         className: 'px-4 py-2 text-left text-xs font-semibold text-gray-600 border-b',
         textContent: header,
@@ -231,25 +270,38 @@ function createCenterPanel(): HTMLElement {
         textContent: song.title,
       });
 
-      // タグ
-      const tagsCell = createElement('td', {
+      // リンク
+      const linkCell = createElement('td', {
         className: 'px-4 py-2',
       });
-      const tagsSpan = createElement('span', {
-        className: 'text-xs text-gray-600',
-        textContent: song.tags.join(', ') || '-',
-      });
-      tagsCell.appendChild(tagsSpan);
 
-      // ステータス
-      const statusCell = createElement('td', {
-        className: 'px-4 py-2',
+      const linkContainer = createElement('div', {
+        className: 'flex gap-1 items-center',
       });
-      const statusBadge = createElement('span', {
-        className: 'px-2 py-0.5 rounded text-xs bg-gray-100',
-        textContent: getStatusLabel(song.status),
+
+      song.videoLinks.forEach((link) => {
+        const linkButton = createElement('button', {
+          className: 'p-0.5 rounded text-red-600 hover:bg-red-50 w-5 h-5 flex items-center justify-center',
+          innerHTML: SquarePlay,
+          attributes: {
+            type: 'button',
+            'aria-label': `再生: ${link.title}`,
+          },
+        });
+        linkButton.title = link.title;
+
+        linkButton.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const newWindow = window.open(link.url, '_blank');
+          if (newWindow) {
+            newWindow.opener = null;
+          }
+        });
+
+        linkContainer.appendChild(linkButton);
       });
-      statusCell.appendChild(statusBadge);
+
+      linkCell.appendChild(linkContainer);
 
       // 追加日
       const dateCell = createElement('td', {
@@ -257,7 +309,7 @@ function createCenterPanel(): HTMLElement {
         textContent: new Date(song.createdAt).toLocaleDateString('ja-JP'),
       });
 
-      appendChildren(row, [titleCell, tagsCell, statusCell, dateCell]);
+      appendChildren(row, [titleCell, linkCell, dateCell]);
       tbody.appendChild(row);
     });
 
@@ -281,50 +333,103 @@ function createRightPanel(): HTMLElement {
     });
     rightPanel.appendChild(placeholder);
   } else {
+    const song = selectedSong; // ローカル変数に代入して型を固定
     const detailContent = createElement('div', {
       className: 'p-4 space-y-4',
     });
 
-    // タイトル
+    // ヘッダー（タイトル + 削除ボタン）
+    const header = createElement('div', {
+      className: 'flex justify-between items-start',
+    });
+
     const title = createElement('h3', {
-      className: 'text-lg font-bold',
-      textContent: selectedSong.title,
+      className: 'text-lg font-bold flex-1',
+      textContent: song.title,
     });
 
-    // プラットフォーム
-    const platform = createElement('div', {
-      className: 'text-xs px-2 py-1 bg-gray-200 rounded inline-block',
-      textContent: selectedSong.platform === 'youtube' ? 'YouTube' : 'ニコニコ',
+    const deleteButton = createElement('button', {
+      className: 'p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded',
+      innerHTML: Trash2,
+      attributes: {
+        type: 'button',
+        'aria-label': `削除: ${song.title}`,
+      },
+    });
+    deleteButton.title = '削除';
+
+    deleteButton.addEventListener('click', () => {
+      if (confirm(`「${song.title}」を削除しますか？`)) {
+        deleteSong(song.id);
+        selectedSong = null;
+        renderDashboard();
+      }
     });
 
-    // URL
-    const urlSection = createElement('div');
-    const urlLabel = createElement('div', {
-      className: 'text-xs font-semibold text-gray-600 mb-1',
-      textContent: '原曲URL',
-    });
-    const urlLink = createElement('a', {
-      className: 'text-xs text-blue-600 hover:underline break-all',
-      textContent: selectedSong.originalVideoUrl,
-    }) as HTMLAnchorElement;
-    urlLink.href = selectedSong.originalVideoUrl;
-    urlLink.target = '_blank';
-    appendChildren(urlSection, [urlLabel, urlLink]);
+    appendChildren(header, [title, deleteButton]);
 
-    // タグ
-    const tagsSection = createElement('div');
-    const tagsLabel = createElement('div', {
-      className: 'text-xs font-semibold text-gray-600 mb-1',
-      textContent: 'タグ',
+    // YouTube動画
+    const linksSection = createElement('div');
+    const linksLabel = createElement('div', {
+      className: 'text-xs font-semibold text-gray-600 mb-2',
+      textContent: 'YouTube',
     });
-    const tagsText = createElement('div', {
-      className: 'text-sm',
-      textContent: selectedSong.tags.join(', ') || '-',
+
+    const linksList = createElement('div', {
+      className: 'space-y-2',
     });
-    appendChildren(tagsSection, [tagsLabel, tagsText]);
+
+    song.videoLinks.forEach((link) => {
+      const linkItem = createElement('div', {
+        className: 'border border-gray-200 rounded p-2',
+      });
+
+      const urlLink = createElement('a', {
+        className: 'text-xs text-blue-600 hover:underline break-all',
+        textContent: link.url,
+        attributes: {
+          rel: 'noopener noreferrer',
+        },
+      }) as HTMLAnchorElement;
+      urlLink.href = link.url;
+      urlLink.target = '_blank';
+
+      linkItem.appendChild(urlLink);
+      linksList.appendChild(linkItem);
+    });
+
+    appendChildren(linksSection, [linksLabel, linksList]);
+
+    // メタデータ（推論結果）
+    const metadataSection = createElement('div', {
+      className: 'space-y-2',
+    });
+
+    const metadataItems: Array<{ label: string; values: string[] }> = [
+      { label: '作曲', values: song.composer },
+      { label: 'ボーカル', values: song.vocalist },
+      { label: '作詞', values: song.lyricist },
+      { label: '編曲', values: song.arranger },
+    ];
+
+    metadataItems.forEach(({ label, values }) => {
+      if (values.length > 0) {
+        const item = createElement('div');
+        const itemLabel = createElement('div', {
+          className: 'text-xs font-semibold text-gray-600',
+          textContent: label,
+        });
+        const itemValue = createElement('div', {
+          className: 'text-sm text-gray-900',
+          textContent: values.join(', '),
+        });
+        appendChildren(item, [itemLabel, itemValue]);
+        metadataSection.appendChild(item);
+      }
+    });
 
     // メモ
-    if (selectedSong.notes) {
+    if (song.notes) {
       const notesSection = createElement('div');
       const notesLabel = createElement('div', {
         className: 'text-xs font-semibold text-gray-600 mb-1',
@@ -332,28 +437,15 @@ function createRightPanel(): HTMLElement {
       });
       const notesText = createElement('div', {
         className: 'text-sm whitespace-pre-wrap',
-        textContent: selectedSong.notes,
+        textContent: song.notes,
       });
       appendChildren(notesSection, [notesLabel, notesText]);
       detailContent.appendChild(notesSection);
     }
 
-    appendChildren(detailContent, [title, platform, urlSection, tagsSection]);
+    appendChildren(detailContent, [header, linksSection, metadataSection]);
     rightPanel.appendChild(detailContent);
   }
 
   return rightPanel;
-}
-
-function getStatusLabel(status: Song['status']): string {
-  switch (status) {
-    case 'candidate':
-      return '候補';
-    case 'practicing':
-      return '練習中';
-    case 'recorded':
-      return '録音済';
-    case 'published':
-      return '公開済';
-  }
 }

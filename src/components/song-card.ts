@@ -17,29 +17,13 @@ export function createSongCard(song: Song): HTMLElement {
     textContent: song.title,
   });
 
-  // プラットフォームアイコン
-  const platformBadge = createElement('span', {
-    className:
-      song.platform === 'youtube'
-        ? 'text-xs px-2 py-1 bg-red-100 text-red-700 rounded'
-        : 'text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded',
-    textContent: song.platform === 'youtube' ? 'YouTube' : 'ニコニコ',
+  // 動画リンク数バッジ
+  const linkCountBadge = createElement('span', {
+    className: 'text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded',
+    textContent: `${song.videoLinks.length}件`,
   });
 
-  appendChildren(titleArea, [title, platformBadge]);
-
-  // タグ
-  const tagsArea = createElement('div', {
-    className: 'flex flex-wrap gap-2 mb-3',
-  });
-
-  song.tags.forEach((tag) => {
-    const tagBadge = createElement('span', {
-      className: 'text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded',
-      textContent: tag,
-    });
-    tagsArea.appendChild(tagBadge);
-  });
+  appendChildren(titleArea, [title, linkCountBadge]);
 
   // メモ（最初の100文字）
   let notesArea: HTMLElement | null = null;
@@ -59,16 +43,11 @@ export function createSongCard(song: Song): HTMLElement {
     className: 'flex justify-between items-center text-xs text-gray-500',
   });
 
-  const statusBadge = createElement('span', {
-    className: getStatusClassName(song.status),
-    textContent: getStatusLabel(song.status),
-  });
-
   const timestamp = createElement('span', {
     textContent: formatRelativeTime({ toMillis: () => song.createdAt } as any),
   });
 
-  appendChildren(footer, [statusBadge, timestamp]);
+  footer.appendChild(timestamp);
 
   // カードクリックイベント
   card.addEventListener('click', () => {
@@ -78,38 +57,10 @@ export function createSongCard(song: Song): HTMLElement {
 
   // 要素を組み立て
   const elements: HTMLElement[] = [titleArea];
-  if (song.tags.length > 0) elements.push(tagsArea);
   if (notesArea) elements.push(notesArea);
   elements.push(footer);
 
   appendChildren(card, elements);
 
   return card;
-}
-
-function getStatusClassName(status: Song['status']): string {
-  const base = 'px-2 py-1 rounded text-xs';
-  switch (status) {
-    case 'candidate':
-      return `${base} bg-gray-100 text-gray-700`;
-    case 'practicing':
-      return `${base} bg-blue-100 text-blue-700`;
-    case 'recorded':
-      return `${base} bg-green-100 text-green-700`;
-    case 'published':
-      return `${base} bg-purple-100 text-purple-700`;
-  }
-}
-
-function getStatusLabel(status: Song['status']): string {
-  switch (status) {
-    case 'candidate':
-      return '候補';
-    case 'practicing':
-      return '練習中';
-    case 'recorded':
-      return '録音済';
-    case 'published':
-      return '公開済';
-  }
 }
